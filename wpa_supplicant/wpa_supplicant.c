@@ -2087,7 +2087,8 @@ int wpa_supplicant_set_suites(struct wpa_supplicant *wpa_s,
 }
 
 
-static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
+static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx,
+				struct wpa_bss *bss)
 {
 	bool scs = true, mscs = true;
 
@@ -2138,6 +2139,13 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
 		if (wpa_s->disable_scs_support)
 			scs = false;
 #endif /* CONFIG_TESTING_OPTIONS */
+		if (bss && !wpa_bss_ext_capab(bss, WLAN_EXT_CAPAB_SCS)) {
+			/* Drop own SCS capability indication since the AP does
+			 * not support it. This is needed to avoid
+			 * interoperability issues with APs that get confused
+			 * with Extended Capabilities element. */
+			scs = false;
+		}
 		if (scs)
 			*pos |= 0x40; /* Bit 54 - SCS */
 		break;
@@ -2160,6 +2168,13 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
 		if (wpa_s->disable_mscs_support)
 			mscs = false;
 #endif /* CONFIG_TESTING_OPTIONS */
+		if (bss && !wpa_bss_ext_capab(bss, WLAN_EXT_CAPAB_MSCS)) {
+			/* Drop own MSCS capability indication since the AP does
+			 * not support it. This is needed to avoid
+			 * interoperability issues with APs that get confused
+			 * with Extended Capabilities element. */
+			mscs = false;
+		}
 		if (mscs)
 			*pos |= 0x20; /* Bit 85 - Mirrored SCS */
 		break;
@@ -2167,7 +2182,8 @@ static void wpas_ext_capab_byte(struct wpa_supplicant *wpa_s, u8 *pos, int idx)
 }
 
 
-int wpas_build_ext_capab(struct wpa_supplicant *wpa_s, u8 *buf, size_t buflen)
+int wpas_build_ext_capab(struct wpa_supplicant *wpa_s, u8 *buf,
+			  size_t buflen, struct wpa_bss *bss)
 {
 	u8 *pos = buf;
 	u8 len = 11, i;
@@ -2183,7 +2199,7 @@ int wpas_build_ext_capab(struct wpa_supplicant *wpa_s, u8 *buf, size_t buflen)
 	*pos++ = WLAN_EID_EXT_CAPAB;
 	*pos++ = len;
 	for (i = 0; i < len; i++, pos++) {
-		wpas_ext_capab_byte(wpa_s, pos, i);
+		wpas_ext_capab_byte(wpa_s, pos, i, bss);
 
 		if (i < wpa_s->extended_capa_len) {
 			*pos &= ~wpa_s->extended_capa_mask[i];
@@ -3069,6 +3085,29 @@ int wpa_is_fils_sk_pfs_supported(struct wpa_supplicant *wpa_s)
 #endif /* CONFIG_FILS */
 
 
+bool wpa_is_non_eht_scs_traffic_desc_supported(struct wpa_bss *bss)
+{
+	const u8 *wfa_capa;
+
+	if (!bss)
+		return false;
+
+	/* Get WFA capability from Beacon or Probe Response frame elements */
+	wfa_capa = wpa_bss_get_vendor_ie(bss, WFA_CAPA_IE_VENDOR_TYPE);
+	if (!wfa_capa)
+		wfa_capa = wpa_bss_get_vendor_ie_beacon(
+			bss, WFA_CAPA_IE_VENDOR_TYPE);
+
+	if (!wfa_capa || wfa_capa[1] < 6 || wfa_capa[6] < 1 ||
+	    !(wfa_capa[7] & WFA_CAPA_QM_NON_EHT_SCS_TRAFFIC_DESC)) {
+		/* AP does not enable QM non EHT traffic description policy */
+		return false;
+	}
+
+	return true;
+}
+
+
 static int wpas_populate_wfa_capa(struct wpa_supplicant *wpa_s,
 				  struct wpa_bss *bss,
 				  u8 *wpa_ie, size_t wpa_ie_len,
@@ -3081,6 +3120,9 @@ static int wpas_populate_wfa_capa(struct wpa_supplicant *wpa_s,
 	os_memset(wfa_capa, 0, sizeof(wfa_capa));
 	if (wpa_s->enable_dscp_policy_capa)
 		wfa_capa[0] |= WFA_CAPA_QM_DSCP_POLICY;
+
+	if (wpa_is_non_eht_scs_traffic_desc_supported(bss))
+		wfa_capa[0] |= WFA_CAPA_QM_NON_EHT_SCS_TRAFFIC_DESC;
 
 	if (!wfa_capa[0])
 		return wpa_ie_len;
@@ -3365,7 +3407,7 @@ static u8 * wpas_populate_assoc_ies(
 		u8 ext_capab[18];
 		int ext_capab_len;
 		ext_capab_len = wpas_build_ext_capab(wpa_s, ext_capab,
-						     sizeof(ext_capab));
+						     sizeof(ext_capab), bss);
 		if (ext_capab_len > 0 &&
 		    wpa_ie_len + ext_capab_len <= max_wpa_ie_len) {
 			u8 *pos = wpa_ie;
@@ -4160,7 +4202,8 @@ static void wpas_start_assoc_cb(struct wpa_radio_work *work, int deinit)
 	if (params.mgmt_frame_protection != NO_MGMT_FRAME_PROTECTION && bss) {
 		const u8 *rsn = wpa_bss_get_ie(bss, WLAN_EID_RSN);
 		struct wpa_ie_data ie;
-		if (rsn && wpa_parse_wpa_ie(rsn, 2 + rsn[1], &ie) == 0 &&
+		if (!wpas_driver_bss_selection(wpa_s) && rsn &&
+		    wpa_parse_wpa_ie(rsn, 2 + rsn[1], &ie) == 0 &&
 		    ie.capabilities &
 		    (WPA_CAPABILITY_MFPC | WPA_CAPABILITY_MFPR)) {
 			wpa_dbg(wpa_s, MSG_DEBUG, "WPA: Selected AP supports "
@@ -7718,10 +7761,28 @@ int wpa_supplicant_run(struct wpa_global *global)
 {
 	struct wpa_supplicant *wpa_s;
 
-	if (global->params.daemonize &&
-	    (wpa_supplicant_daemon(global->params.pid_file) ||
-	     eloop_sock_requeue()))
-		return -1;
+	/* When the wpa_supplicant gets daemonized, the eap_proxy thread that
+	 * was created under wpa_supplicant before it daemonize will also get
+	 * terminated. This results in blocking the wpa_supplicant deinit flow
+	 * while waiting for eap_proxy thread.
+	 * Hence ensure to restart the eap_proxy thread whenever the
+	 * wpa_supplicant is daemonized.
+	 */
+	if (global->params.daemonize) {
+#ifdef CONFIG_EAP_PROXY
+		wpa_sm_set_eapol(global->ifaces->wpa, NULL);
+		eapol_sm_deinit(global->ifaces->eapol);
+		global->ifaces->eapol = NULL;
+#endif /* CONFIG_EAP_PROXY */
+		if (wpa_supplicant_daemon(global->params.pid_file) ||
+		    eloop_sock_requeue())
+			return -1;
+#ifdef CONFIG_EAP_PROXY
+		if (wpa_supplicant_init_eapol(global->ifaces) < 0)
+			return -1;
+		wpa_sm_set_eapol(global->ifaces->wpa, global->ifaces->eapol);
+#endif /* CONFIG_EAP_PROXY */
+	}
 
 #ifdef CONFIG_MATCH_IFACE
 	if (wpa_supplicant_match_existing(global))
