@@ -285,8 +285,6 @@ struct hostapd_bss_config {
 	char vlan_bridge[IFNAMSIZ + 1];
 	char wds_bridge[IFNAMSIZ + 1];
 
-	u8 link_id; /* MLO Link ID for MLD AP */
-
 	enum hostapd_logger_level logger_syslog_level, logger_stdout_level;
 
 	unsigned int logger_syslog; /* module bitfield */
@@ -917,6 +915,17 @@ struct hostapd_bss_config {
 	u8 rnr;
 	char *config_id;
 	bool xrates_supported;
+
+#ifdef CONFIG_IEEE80211BE
+	/* The AP is part of an AP MLD */
+	u8 mld_ap;
+
+	/* The MLD ID to which the AP MLD is affiliated with */
+	u8 mld_id;
+
+	/* The AP's MLD MAC address within the AP MLD */
+	u8 mld_addr[ETH_ALEN];
+#endif /* CONFIG_IEEE80211BE */
 };
 
 /**
@@ -1139,6 +1148,8 @@ struct hostapd_config {
         enum oper_chan_width eht_oper_chwidth;
 	u8 eht_oper_centr_freq_seg0_idx;
 	struct eht_phy_capabilities_info eht_phy_capab;
+	u16 punct_bitmap; /* a bitmap of disabled 20 MHz channels */
+	u8 punct_acs_threshold;
 #endif /* CONFIG_IEEE80211BE */
 
 	/* EHT enable/disable config from CHAN_SWITCH */
@@ -1274,5 +1285,6 @@ int hostapd_add_acl_maclist(struct mac_acl_entry **acl, int *num,
 			    int vlan_id, const u8 *addr);
 void hostapd_remove_acl_mac(struct mac_acl_entry **acl, int *num,
 			    const u8 *addr);
+bool hostapd_config_check_bss_6g(struct hostapd_bss_config *bss);
 
 #endif /* HOSTAPD_CONFIG_H */
