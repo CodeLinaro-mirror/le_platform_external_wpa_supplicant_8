@@ -2191,7 +2191,7 @@ LIBPASNSO += ../src/crypto/crypto_wolfssl.c
 ifdef TLS_FUNCS
 LIBPASNSO += ../src/crypto/tls_wolfssl.c
 NEED_TLS_PRF_SHA256=y
-LIBPASNSO += -lwolfssl -lm
+LIBPASNSO_DEP += -lwolfssl -lm
 endif
 endif
 
@@ -2199,7 +2199,7 @@ ifeq ($(CONFIG_TLS), openssl)
 LIBPASNSO += ../src/crypto/crypto_openssl.c
 ifdef TLS_FUNCS
 LIBPASNSO += ../src/crypto/tls_openssl.c
-LIBPASNSO += -lssl -lcrypto
+LIBPASNSO_DEP += -lssl -lcrypto
 NEED_TLS_PRF_SHA256=y
 endif
 endif
@@ -2208,8 +2208,8 @@ ifeq ($(CONFIG_TLS), gnutls)
 LIBPASNSO += ../src/crypto/crypto_$(CONFIG_CRYPTO).c
 ifdef TLS_FUNCS
 LIBPASNSO += ../src/crypto/tls_gnutls.c
-LIBPASNSO += -lgnutls -lgpg-error
-LIBPASNSO += -lgcrypt
+LIBPASNSO_DEP += -lgnutls -lgpg-error
+LIBPASNSO_DEP += -lgcrypt
 endif
 endif
 
@@ -2263,7 +2263,7 @@ LIBPASNSO += ../src/pasn/pasn_responder.c
 
 libpasn.so: $(LIBPASNSO)
 	@$(E) "  CC  $@ ($^)"
-	$(Q)$(CC) $(LDFLAGS) -o $@ $(PASN_CFLAGS) -shared -fPIC -lcrypto $^
+	$(Q)$(CC) $(LDFLAGS) -o $@ $(PASN_CFLAGS) -shared -fPIC $^ -lcrypto $(LIBPASNSO_DEP)
 
 clean: common-clean
 	$(MAKE) -C ../src clean
