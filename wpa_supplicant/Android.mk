@@ -422,6 +422,7 @@ NEED_SHA256=y
 NEED_SHA384=y
 OBJS += src/common/ptksa_cache.c
 OBJS += src/pasn/pasn_initiator.c
+OBJS += src/pasn/pasn_common.c
 OBJS += pasn_supplicant.c
 endif
 
@@ -1906,6 +1907,7 @@ endif
 
 PASNOBJS += src/pasn/pasn_initiator.c
 PASNOBJS += src/pasn/pasn_responder.c
+PASNOBJS += src/pasn/pasn_common.c
 
 ########################
 
