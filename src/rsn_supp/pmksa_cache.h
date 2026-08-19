@@ -20,6 +20,7 @@ struct rsn_pmksa_cache_entry {
 	os_time_t expiration;
 	int akmp; /* WPA_KEY_MGMT_* */
 	u8 aa[ETH_ALEN];
+	u8 spa[ETH_ALEN];
 
 	/*
 	 * If FILS Cache Identifier is included (fils_cache_id_set), this PMKSA
@@ -66,7 +67,8 @@ pmksa_cache_init(void (*free_cb)(struct rsn_pmksa_cache_entry *entry,
 		 void *ctx, struct wpa_sm *sm);
 void pmksa_cache_deinit(struct rsn_pmksa_cache *pmksa);
 struct rsn_pmksa_cache_entry * pmksa_cache_get(struct rsn_pmksa_cache *pmksa,
-					       const u8 *aa, const u8 *pmkid,
+					       const u8 *aa, const u8 *spa,
+					       const u8 *pmkid,
 					       const void *network_ctx,
 					       int akmp);
 int pmksa_cache_list(struct rsn_pmksa_cache *pmksa, char *buf, size_t len);

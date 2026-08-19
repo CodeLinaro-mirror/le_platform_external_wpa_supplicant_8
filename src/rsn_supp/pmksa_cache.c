@@ -151,7 +151,7 @@ static void pmksa_cache_set_expiration(struct rsn_pmksa_cache *pmksa)
 		return;
 
 	entry = pmksa->sm->cur_pmksa ? pmksa->sm->cur_pmksa :
-		pmksa_cache_get(pmksa, pmksa->sm->bssid, NULL, NULL, 0);
+		pmksa_cache_get(pmksa, pmksa->sm->bssid, NULL, NULL, NULL, 0);
 	if (entry && !wpa_key_mgmt_sae(entry->akmp)) {
 		sec = pmksa->pmksa->reauth_time - now.sec;
 		if (sec < 0)
@@ -227,6 +227,7 @@ pmksa_cache_add(struct rsn_pmksa_cache *pmksa, const u8 *pmk, size_t pmk_len,
 		os_memcpy(entry->fils_cache_id, cache_id, FILS_CACHE_ID_LEN);
 	}
 	os_memcpy(entry->aa, aa, ETH_ALEN);
+	os_memcpy(entry->spa, spa, ETH_ALEN);
 	entry->network_ctx = network_ctx;
 
 	return pmksa_cache_add_entry(pmksa, entry);
@@ -244,7 +245,8 @@ pmksa_cache_add_entry(struct rsn_pmksa_cache *pmksa,
 	pos = pmksa->pmksa;
 	prev = NULL;
 	while (pos) {
-		if (os_memcmp(entry->aa, pos->aa, ETH_ALEN) == 0) {
+		if (os_memcmp(entry->aa, pos->aa, ETH_ALEN) == 0 &&
+		    os_memcmp(entry->spa, pos->spa, ETH_ALEN) == 0) {
 			if (pos->pmk_len == entry->pmk_len &&
 			    os_memcmp_const(pos->pmk, entry->pmk,
 					    entry->pmk_len) == 0 &&
@@ -326,7 +328,8 @@ pmksa_cache_add_entry(struct rsn_pmksa_cache *pmksa,
 	}
 	pmksa->pmksa_count++;
 	wpa_printf(MSG_DEBUG, "RSN: Added PMKSA cache entry for " MACSTR
-		   " network_ctx=%p akmp=0x%x", MAC2STR(entry->aa),
+		   " spa=" MACSTR " network_ctx=%p akmp=0x%x",
+		   MAC2STR(entry->aa), MAC2STR(entry->spa),
 		   entry->network_ctx, entry->akmp);
 
 	if (!pmksa->sm)
@@ -422,13 +425,15 @@ void pmksa_cache_deinit(struct rsn_pmksa_cache *pmksa)
  * Returns: Pointer to PMKSA cache entry or %NULL if no match was found
  */
 struct rsn_pmksa_cache_entry * pmksa_cache_get(struct rsn_pmksa_cache *pmksa,
-					       const u8 *aa, const u8 *pmkid,
+					       const u8 *aa, const u8 *spa,
+					       const u8 *pmkid,
 					       const void *network_ctx,
 					       int akmp)
 {
 	struct rsn_pmksa_cache_entry *entry = pmksa->pmksa;
 	while (entry) {
 		if ((aa == NULL || os_memcmp(entry->aa, aa, ETH_ALEN) == 0) &&
+		    (!spa || os_memcmp(entry->spa, spa, ETH_ALEN) == 0) &&
 		    (pmkid == NULL ||
 		     os_memcmp(entry->pmkid, pmkid, PMKID_LEN) == 0) &&
 		    (!akmp || akmp == entry->akmp) &&
@@ -604,11 +609,11 @@ int pmksa_cache_set_current(struct wpa_sm *sm, const u8 *pmkid,
 
 	sm->cur_pmksa = NULL;
 	if (pmkid)
-		sm->cur_pmksa = pmksa_cache_get(pmksa, NULL, pmkid,
-						network_ctx, akmp);
+		sm->cur_pmksa = pmksa_cache_get(pmksa, NULL, sm->own_addr,
+						pmkid, network_ctx, akmp);
 	if (sm->cur_pmksa == NULL && bssid)
-		sm->cur_pmksa = pmksa_cache_get(pmksa, bssid, NULL,
-						network_ctx, akmp);
+		sm->cur_pmksa = pmksa_cache_get(pmksa, bssid, sm->own_addr,
+						NULL, network_ctx, akmp);
 	if (sm->cur_pmksa == NULL && try_opportunistic && bssid)
 		sm->cur_pmksa = pmksa_cache_get_opportunistic(pmksa,
 							      network_ctx,

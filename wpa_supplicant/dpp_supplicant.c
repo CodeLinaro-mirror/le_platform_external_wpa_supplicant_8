@@ -2603,6 +2603,7 @@ static void wpas_dpp_rx_peer_disc_resp(struct wpa_supplicant *wpa_s,
 	if (!entry)
 		goto fail;
 	os_memcpy(entry->aa, src, ETH_ALEN);
+	os_memcpy(entry->spa, wpa_s->own_addr, ETH_ALEN);
 	os_memcpy(entry->pmkid, intro.pmkid, PMKID_LEN);
 	os_memcpy(entry->pmk, intro.pmk, intro.pmk_len);
 	entry->pmk_len = intro.pmk_len;
@@ -3509,7 +3510,7 @@ int wpas_dpp_check_connect(struct wpa_supplicant *wpa_s, struct wpa_ssid *ssid,
 	if (rsn && wpa_parse_wpa_ie(rsn, 2 + rsn[1], &ied) == 0 &&
 	    !(ied.key_mgmt & WPA_KEY_MGMT_DPP))
 		return 0; /* AP does not support DPP AKM - continue */
-	if (wpa_sm_pmksa_exists(wpa_s->wpa, bss->bssid, ssid))
+	if (wpa_sm_pmksa_exists(wpa_s->wpa, bss->bssid, wpa_s->own_addr, ssid))
 		return 0; /* PMKSA exists for DPP AKM - continue */
 
 	if (!ssid->dpp_connector || !ssid->dpp_netaccesskey ||
